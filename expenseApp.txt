@@ -1,0 +1,290 @@
+
+
+
+expensesApp.app:
+<aura:application extends="force:slds">
+       
+        <!-- This component is the real "app" -->
+        <c:expenses/>
+</aura:application>
+
+expenses.cmp:
+<aura:component controller="ExpensesController">
+    <aura:attribute name="expenses" type="Expense__c[]"/>
+    <aura:handler name="init" action="{!c.doInit}" value="{!this}"/>
+    <aura:handler name="updateExpense" event="c:expensesItemUpdate"
+        action="{!c.handleUpdateExpense}"/>
+    <aura:handler name="createExpense" event="c:expensesItemUpdate"
+        action="{!c.handleCreateExpense}"/>
+
+    <!-- PAGE HEADER -->
+    <lightning:layout class="slds-page-header slds-page-header--object-home">
+        <lightning:layoutItem>
+            <lightning:icon iconName="standard:scan_card" alternativeText="My Expenses"/>
+        </lightning:layoutItem>
+        <lightning:layoutItem padding="horizontal-small">
+            <div class="page-section page-header">
+                <h1 class="slds-text-heading--label">Expenses</h1>
+                <h2 class="slds-text-heading--medium">My Expenses</h2>
+            </div>
+        </lightning:layoutItem>
+    </lightning:layout>
+    <!-- / PAGE HEADER -->
+    <!-- NEW EXPENSE FORM -->
+    <lightning:layout>
+        <lightning:layoutItem padding="around-small" size="6">
+            <c:expenseForm/>
+        </lightning:layoutItem>
+    </lightning:layout>
+    <!-- / NEW EXPENSE FORM -->
+    <lightning:layout>
+        <lightning:layoutItem padding="around-small" size="6">
+            <c:expensesList expenses="{!v.expenses}"/>
+        </lightning:layoutItem>
+        <lightning:layoutItem padding="around-small" size="6">
+            Put something cool here
+        </lightning:layoutItem>
+    </lightning:layout>
+
+
+</aura:component>
+
+
+expensesController.js:
+({    
+        handleUpdateExpense: function(component, event, helper) {
+            var updatedExp = event.getParam("expense");
+            helper.updateExpense(component, updatedExp);
+        },
+
+        // Load expenses from Salesforce
+    doInit: function(component, event, helper) {
+        // Create the action
+        var action = component.get("c.getExpenses");
+        // Add callback behavior for when response is received
+        action.setCallback(this, function(response) {
+            var state = response.getState();
+            if (state === "SUCCESS") {
+                component.set("v.expenses", response.getReturnValue());
+            }
+            else {
+                console.log("Failed with state: " + state);
+            }
+        });
+        // Send action off to be executed
+        $A.enqueueAction(action);
+    }
+})
+
+
+expensesHelper.js:
+({
+        createExpense: function(component, expense) {
+            this.saveExpense(component, expense, function(response){
+                var state = response.getState();
+                if (state === "SUCCESS") {
+                    var expenses = component.get("v.expenses");
+                    expenses.push(response.getReturnValue());
+                    component.set("v.expenses", expenses);
+                }
+            });
+        },
+    
+        updateExpense: function(component, expense) {
+            this.saveExpense(component, expense);
+        },
+    	
+    	saveExpense: function(component, expense, callback) {
+            var action = component.get("c.saveExpense");
+            action.setParams({
+                "expense": expense
+            });
+            if (callback) {
+                action.setCallback(this, callback);
+            }
+            $A.enqueueAction(action);
+        },
+
+})
+
+
+ExpensesController.apxc:
+public with sharing class ExpensesController {
+    @AuraEnabled
+    public static List<Expense__c> getExpenses() {
+        // Perform isAccessible() checking first, then
+        return [SELECT Id, Name, Amount__c, Client__c, Date__c, 
+                       Reimbursed__c, CreatedDate 
+                FROM Expense__c];
+    }
+    
+    @AuraEnabled
+    public static Expense__c saveExpense(Expense__c expense) {
+        // Perform isUpdateable() checking first, then
+        upsert expense;
+        return expense;
+    }
+}
+
+expenseForm.cmp:
+<aura:component >
+    <aura:attribute name="newExpense" type="Expense__c"
+         default="{ 'sobjectType': 'Expense__c',
+                        'Name': '',
+                        'Amount__c': 0,
+                        'Client__c': '',
+                        'Date__c': '',
+                        'Reimbursed__c': false }"/>
+    <aura:registerEvent name="createExpense" type="c:expensesItemUpdate"/>
+	<!-- CREATE NEW EXPENSE -->
+            <div aria-labelledby="newexpenseform">
+                <!-- BOXED AREA -->
+                <fieldset class="slds-box slds-theme--default slds-container--small">
+                <legend id="newexpenseform" class="slds-text-heading--small 
+                  slds-p-vertical--medium">
+                  Add Expense
+                </legend>
+          
+                <!-- CREATE NEW EXPENSE FORM -->
+                <form class="slds-form--stacked">          
+                    <lightning:input aura:id="expenseform" label="Expense Name"
+                                     name="expensename"
+                                     value="{!v.newExpense.Name}"
+                                     required="true"/> 
+                    <lightning:input type="number" aura:id="expenseform" label="Amount"
+                                     name="expenseamount"
+                                     min="0.1"
+                                     formatter="currency"
+                                     step="0.01"
+                                     value="{!v.newExpense.Amount__c}"
+                                     messageWhenRangeUnderflow="Enter an amount that's at least $0.10."/>
+                    <lightning:input aura:id="expenseform" label="Client"
+                                     name="expenseclient"
+                                     value="{!v.newExpense.Client__c}"
+                                     placeholder="ABC Co."/>
+                    <lightning:input type="date" aura:id="expenseform" label="Expense Date"
+                                     name="expensedate"
+                                     value="{!v.newExpense.Date__c}"/>
+                    <lightning:input type="checkbox" aura:id="expenseform" label="Reimbursed?"  
+                                     name="expreimbursed"
+                                     checked="{!v.newExpense.Reimbursed__c}"/>
+                    <lightning:button label="Create Expense" 
+                                      class="slds-m-top--medium"
+                                      variant="brand"
+                                      onclick="{!c.clickCreate}"/>
+                </form>
+                <!-- / CREATE NEW EXPENSE FORM -->
+          
+              </fieldset>
+              <!-- / BOXED AREA -->
+            </div>
+	<!-- / CREATE NEW EXPENSE -->
+</aura:component>
+
+
+expenseFormController.js:
+({
+	clickCreate: function(component, event, helper) {
+        var validExpense = component.find('expenseform').reduce(function (validSoFar, inputCmp) {
+            // Displays error messages for invalid fields
+            inputCmp.showHelpMessageIfInvalid();
+            return validSoFar && inputCmp.get('v.validity').valid;
+        }, true);
+        // If we pass error checking, do some real work
+        if(validExpense){
+            // Create the new expense
+            var newExpense = component.get("v.newExpense");
+            console.log("Create expense: " + JSON.stringify(newExpense));
+            helper.createExpense(component, newExpense);
+        }
+    },
+})
+
+
+expenseFormHelper.js:
+({
+	createExpense: function(component, newExpense) {
+        var createEvent = component.getEvent("createExpense");
+        createEvent.setParams({ "expense": newExpense });
+        createEvent.fire();
+    },
+
+})
+
+
+expensesList.cmp:
+<aura:component>
+    <aura:attribute name="expenses" type="Expense__c[]"/>
+    <lightning:card title="Expenses">
+        <p class="slds-p-horizontal--small">
+            <aura:iteration items="{!v.expenses}" var="expense">
+                <c:expenseItem expense="{!expense}"/>
+            </aura:iteration>
+        </p>
+    </lightning:card>
+</aura:component>
+
+
+expenseItem.cmp:
+<aura:component>
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    <aura:attribute name="formatdate" type="Date"/>
+    <aura:attribute name="expense" type="Expense__c"/>
+    <aura:registerEvent name="updateExpense" type="c:expensesItemUpdate"/>
+
+
+    <lightning:card title="{!v.expense.Name}" iconName="standard:scan_card"
+                    class="{!v.expense.Reimbursed__c ?
+                           'slds-theme--success' : ''}">
+        <aura:set attribute="footer">
+            <p>Date: <lightning:formattedDateTime value="{!v.formatdate}"/></p>
+            <p class="slds-text-title"><lightning:relativeDateTime value="{!v.formatdate}"/></p>
+        </aura:set>
+        <p class="slds-text-heading--medium slds-p-horizontal--small">
+           Amount: <lightning:formattedNumber value="{!v.expense.Amount__c}" style="currency"/>
+        </p>
+        <p class="slds-p-horizontal--small">
+            Client: {!v.expense.Client__c}
+        </p>
+        <p>
+            <lightning:input type="toggle" 
+                             label="Reimbursed?"
+                             name="reimbursed"
+                             class="slds-p-around--small"
+                             checked="{!v.expense.Reimbursed__c}"
+                             messageToggleActive="Yes"
+                             messageToggleInactive="No"
+                             onchange="{!c.clickReimbursed}"/>
+        </p>
+    </lightning:card>
+</aura:component>
+
+
+expenseItemController.js:
+({
+    doInit : function(component, event, helper) {
+        var mydate = component.get("v.expense.Date__c");
+        if(mydate){
+            component.set("v.formatdate", new Date(mydate));
+        }
+    },
+    
+    clickReimbursed: function(component, event, helper) {
+        var expense = component.get("v.expense");
+        var updateEvent = component.getEvent("updateExpense");
+        updateEvent.setParams({ "expense": expense });
+        updateEvent.fire();
+    }
+})
+
+
+expenseItem.css:
+.THIS.slds-card.slds-theme--success {
+    background-color: rgb(75, 202, 129);
+}
+
+
+expensesItemUpdate.evt:
+<aura:event type="COMPONENT">
+    <aura:attribute name="expense" type="Expense__c"/>
+</aura:event>
